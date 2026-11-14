@@ -119,7 +119,7 @@ router.post("/analyze", async (req, res) => {
     if (!process.env.GEMINI_API_KEY) {
       message = "Server API key is not configured yet.";
     } else if (rawMsg.includes("API_KEY_INVALID") || status === 403) {
-      message = "Server API key is invalid or unauthorized. Please check Settings > Secrets.";
+      message = "Server API key is invalid or unauthorized.";
     } else if (status === 429) {
       message = "The analysis service is busy right now. Please wait a moment and try again.";
     }

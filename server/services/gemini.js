@@ -9,14 +9,7 @@ function getClient() {
     throw err;
   }
 
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
-    },
-  });
+  return new GoogleGenAI({ apiKey });
 }
 
 const VALID_RISKS = new Set(["safe", "suspicious", "likely_scam"]);

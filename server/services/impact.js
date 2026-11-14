@@ -10,10 +10,15 @@ const STATS_FILE = path.join(DATA_DIR, "impact.json");
 // Serialize writes so concurrent requests do not overwrite each other's counts.
 let writeQueue = Promise.resolve();
 
+// Track seen anonymous ID + country pairs in memory so impact.json stores only counts.
+const seenCountryUsers = new Set();
+
 function defaultCounts() {
   return {
     lettersExplained: 0,
     scamsFlagged: 0,
+    helpfulYes: 0,
+    helpfulNo: 0,
     countries: {},
   };
 }
@@ -25,6 +30,8 @@ async function readCounts() {
     return {
       lettersExplained: Number(parsed?.lettersExplained) || 0,
       scamsFlagged: Number(parsed?.scamsFlagged) || 0,
+      helpfulYes: Number(parsed?.helpfulYes) || 0,
+      helpfulNo: Number(parsed?.helpfulNo) || 0,
       countries: parsed?.countries && typeof parsed.countries === "object" ? parsed.countries : {},
     };
   } catch (err) {
@@ -43,13 +50,38 @@ function summarize(counts) {
   };
 }
 
+function summarizeFull(counts) {
+  const totalRatings = counts.helpfulYes + counts.helpfulNo;
+  const helpfulPercent = totalRatings > 0 ? Math.round((counts.helpfulYes / totalRatings) * 100) : 0;
+  const countries = Object.entries(counts.countries)
+    .map(([country, users]) => ({ country, users: Number(users) || 0 }))
+    .filter((entry) => entry.users > 0)
+    .sort((a, b) => b.users - a.users || a.country.localeCompare(b.country));
+
+  return {
+    lettersExplained: counts.lettersExplained,
+    scamsFlagged: counts.scamsFlagged,
+    countriesReached: countries.length,
+    helpfulYes: counts.helpfulYes,
+    helpfulNo: counts.helpfulNo,
+    totalRatings,
+    helpfulPercent,
+    countries,
+  };
+}
+
 export async function getImpactStats() {
   const counts = await readCounts();
   return summarize(counts);
 }
 
-// Store only aggregate numbers and country counts — never letter text or photos.
-export function recordAnalysis({ scamRisk, country }) {
+export async function getFullStats() {
+  const counts = await readCounts();
+  return summarizeFull(counts);
+}
+
+// Store only aggregate numbers and country counts — never letter text, photos, or IPs.
+export function recordAnalysis({ scamRisk, country, anonId = "", countCountryUser = true }) {
   const task = writeQueue.then(async () => {
     const counts = await readCounts();
     counts.lettersExplained += 1;
@@ -58,13 +90,46 @@ export function recordAnalysis({ scamRisk, country }) {
       counts.scamsFlagged += 1;
     }
 
-    if (country) {
-      counts.countries[country] = (Number(counts.countries[country]) || 0) + 1;
+    if (country && countCountryUser !== false) {
+      let shouldCountUser = true;
+      if (anonId) {
+        const key = `${country}::${anonId}`;
+        if (seenCountryUsers.has(key)) {
+          shouldCountUser = false;
+        } else {
+          if (seenCountryUsers.size > 50000) {
+            seenCountryUsers.clear();
+          }
+          seenCountryUsers.add(key);
+        }
+      }
+
+      if (shouldCountUser) {
+        counts.countries[country] = (Number(counts.countries[country]) || 0) + 1;
+      }
     }
 
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.writeFile(STATS_FILE, JSON.stringify(counts, null, 2), "utf8");
     return summarize(counts);
+  });
+
+  writeQueue = task.catch(() => {});
+  return task;
+}
+
+export function recordFeedback({ helpful }) {
+  const task = writeQueue.then(async () => {
+    const counts = await readCounts();
+    if (helpful) {
+      counts.helpfulYes += 1;
+    } else {
+      counts.helpfulNo += 1;
+    }
+
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(STATS_FILE, JSON.stringify(counts, null, 2), "utf8");
+    return summarizeFull(counts);
   });
 
   writeQueue = task.catch(() => {});

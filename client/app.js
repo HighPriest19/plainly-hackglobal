@@ -82,6 +82,9 @@ const els = {
   redFlagsList: document.getElementById("redFlagsList"),
   noFlagsNote: document.getElementById("noFlagsNote"),
   nextStepsList: document.getElementById("nextStepsList"),
+  thumbUpBtn: document.getElementById("thumbUpBtn"),
+  thumbDownBtn: document.getElementById("thumbDownBtn"),
+  feedbackStatus: document.getElementById("feedbackStatus"),
   shareAlertBtn: document.getElementById("shareAlertBtn"),
   startOverBtn: document.getElementById("startOverBtn"),
   impactLetters: document.getElementById("impactLetters"),
@@ -93,6 +96,89 @@ const els = {
   nativeShareBtn: document.getElementById("nativeShareBtn"),
   closeModalBtn: document.getElementById("closeModalBtn"),
 };
+
+const ANON_ID_KEY = "plainly_anon_id";
+const COUNTED_COUNTRIES_KEY = "plainly_counted_countries";
+
+function getAnonId() {
+  try {
+    let existing = window.localStorage.getItem(ANON_ID_KEY);
+    if (existing) return existing;
+
+    const generated =
+      window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    window.localStorage.setItem(ANON_ID_KEY, generated);
+    return generated;
+  } catch {
+    return "";
+  }
+}
+
+function getCountedCountries() {
+  try {
+    const raw = window.localStorage.getItem(COUNTED_COUNTRIES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasCountedCountry(country) {
+  if (!country) return true;
+  return getCountedCountries().includes(country);
+}
+
+function markCountryCounted(country) {
+  if (!country) return;
+  try {
+    const list = getCountedCountries();
+    if (!list.includes(country)) {
+      list.push(country);
+      window.localStorage.setItem(COUNTED_COUNTRIES_KEY, JSON.stringify(list));
+    }
+  } catch {
+    // Ignore storage quota or private mode failures.
+  }
+}
+
+function resetFeedbackUi() {
+  els.thumbUpBtn.disabled = false;
+  els.thumbDownBtn.disabled = false;
+  els.thumbUpBtn.classList.remove("selected");
+  els.thumbDownBtn.classList.remove("selected");
+  els.thumbUpBtn.setAttribute("aria-pressed", "false");
+  els.thumbDownBtn.setAttribute("aria-pressed", "false");
+  els.feedbackStatus.textContent = "";
+  els.feedbackStatus.classList.add("hidden");
+}
+
+async function submitFeedback(helpful) {
+  els.thumbUpBtn.disabled = true;
+  els.thumbDownBtn.disabled = true;
+
+  const chosenBtn = helpful ? els.thumbUpBtn : els.thumbDownBtn;
+  chosenBtn.classList.add("selected");
+  chosenBtn.setAttribute("aria-pressed", "true");
+
+  els.feedbackStatus.textContent = "Thanks for the feedback.";
+  els.feedbackStatus.classList.remove("hidden");
+
+  try {
+    await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        helpful,
+        anonId: getAnonId(),
+      }),
+    });
+  } catch {
+    // Keep confirmation visible even if network drops briefly.
+  }
+}
 
 function showError(message) {
   els.errorBanner.textContent = message;
@@ -217,6 +303,7 @@ function resetWorkspace() {
   stopSpeech();
   stopDictation();
   clearError();
+  resetFeedbackUi();
   state.lastResult = null;
   els.loadingSection.classList.add("hidden");
   els.resultsSection.classList.add("hidden");
@@ -478,6 +565,8 @@ function renderResults(result, originalText) {
     els.nextStepsList.appendChild(li);
   });
 
+  resetFeedbackUi();
+
   // Trigger slide-in and stamp thud animations cleanly.
   els.loadingSection.classList.add("hidden");
   els.resultsSection.classList.remove("hidden");
@@ -509,6 +598,10 @@ async function analyzeDocument() {
   els.resultsSection.classList.add("hidden");
   els.loadingSection.classList.remove("hidden");
 
+  const selectedCountry = els.countrySelect.value;
+  const anonId = getAnonId();
+  const countCountryUser = selectedCountry ? !hasCountedCountry(selectedCountry) : false;
+
   try {
     const res = await fetch("/api/analyze", {
       method: "POST",
@@ -518,13 +611,19 @@ async function analyzeDocument() {
         imageBase64: state.imageBase64,
         mimeType: state.mimeType,
         language: state.language,
-        country: els.countrySelect.value,
+        country: selectedCountry,
+        anonId,
+        countCountryUser,
       }),
     });
 
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || "Could not read this document.");
+    }
+
+    if (selectedCountry) {
+      markCountryCounted(selectedCountry);
     }
 
     renderResults(data, text);
@@ -860,6 +959,8 @@ function bindEvents() {
 
   els.analyzeBtn.addEventListener("click", analyzeDocument);
   els.speakBtn.addEventListener("click", toggleSpeech);
+  els.thumbUpBtn.addEventListener("click", () => submitFeedback(true));
+  els.thumbDownBtn.addEventListener("click", () => submitFeedback(false));
   els.shareAlertBtn.addEventListener("click", openShareModal);
   els.closeModalBtn.addEventListener("click", closeShareModal);
   els.nativeShareBtn.addEventListener("click", shareCardNative);

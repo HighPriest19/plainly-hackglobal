@@ -24,6 +24,10 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/impact", (_req, res) => {
+  res.sendFile(path.join(clientDir, "impact.html"));
+});
+
 // Send all other routes to the main page.
 app.get("*", (_req, res) => {
   res.sendFile(path.join(clientDir, "index.html"));

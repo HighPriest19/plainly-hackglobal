@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { analyzeWithGemini } from "../services/gemini.js";
-import { getImpactStats, recordAnalysis } from "../services/impact.js";
+import { getFullStats, getImpactStats, recordAnalysis, recordFeedback } from "../services/impact.js";
 
 const router = Router();
 
@@ -57,6 +57,11 @@ function cleanCountry(value) {
   return cleaned;
 }
 
+function cleanAnonId(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+}
+
 router.get("/impact", async (_req, res) => {
   try {
     const stats = await getImpactStats();
@@ -64,6 +69,39 @@ router.get("/impact", async (_req, res) => {
   } catch (err) {
     console.error("Impact route error:", err?.message || err);
     return res.json({ lettersExplained: 0, scamsFlagged: 0, countriesReached: 0 });
+  }
+});
+
+router.get("/stats", async (_req, res) => {
+  try {
+    const stats = await getFullStats();
+    return res.json(stats);
+  } catch (err) {
+    console.error("Stats route error:", err?.message || err);
+    return res.json({
+      lettersExplained: 0,
+      scamsFlagged: 0,
+      countriesReached: 0,
+      helpfulYes: 0,
+      helpfulNo: 0,
+      totalRatings: 0,
+      helpfulPercent: 0,
+      countries: [],
+    });
+  }
+});
+
+router.post("/feedback", async (req, res) => {
+  try {
+    if (typeof req.body?.helpful !== "boolean") {
+      return res.status(400).json({ error: "Please choose thumbs up or thumbs down." });
+    }
+
+    await recordFeedback({ helpful: req.body.helpful });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("Feedback route error:", err?.message || err);
+    return res.status(500).json({ error: "Could not save feedback right now." });
   }
 });
 
@@ -80,6 +118,8 @@ router.post("/analyze", async (req, res) => {
     const text = cleanText(req.body?.text);
     const language = cleanLanguage(req.body?.language);
     const country = cleanCountry(req.body?.country);
+    const anonId = cleanAnonId(req.body?.anonId);
+    const countCountryUser = req.body?.countCountryUser !== false;
     const imageBase64 = typeof req.body?.imageBase64 === "string" ? req.body.imageBase64 : "";
     const mimeType = typeof req.body?.mimeType === "string" ? req.body.mimeType : "";
 
@@ -103,7 +143,12 @@ router.post("/analyze", async (req, res) => {
     });
 
     try {
-      await recordAnalysis({ scamRisk: result.scamRisk, country });
+      await recordAnalysis({
+        scamRisk: result.scamRisk,
+        country,
+        anonId,
+        countCountryUser,
+      });
     } catch (statsErr) {
       console.error("Failed to save impact count:", statsErr?.message || statsErr);
     }

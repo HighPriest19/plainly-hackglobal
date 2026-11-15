@@ -6,8 +6,8 @@ Built by **npm install victory** for HackGlobal 2026.
 
 | | |
 |---|---|
-| Live demo | https://plainly-hackglobal.onrender.com/ |
-| Live impact numbers | https://plainly-hackglobal.onrender.com/impact |
+| Live demo on Vultr | https://149-28-226-182.sslip.io/ |
+| Demo used in our submission (Render) | https://plainly-hackglobal.onrender.com/ |
 | Hackathon track | Civic and real-world impact |
 
 ---
@@ -46,7 +46,7 @@ Plainly does two jobs in one step:
 flowchart LR
     U[Browser<br/>photo or pasted text<br/>+ chosen language] -->|POST /api/analyze| S
 
-    subgraph V[Host: Render now, Vultr-ready]
+    subgraph V[Vultr Cloud Compute instance]
         S[Express server<br/>validate and clean input] --> M[Normalize JSON<br/>safe defaults]
         ST[Static client<br/>HTML, CSS, JS]
     end
@@ -73,15 +73,17 @@ flowchart LR
 | Read aloud and dictation | Browser Web Speech API |
 | Impact counter | Totals saved in a small JSON file on the server |
 | Share card | HTML5 canvas, exported as PNG |
-| Hosting | Render (live demo), Vultr-ready |
+| Hosting | Vultr Cloud Compute (Render for the original submitted demo) |
 
 ---
 
 ## Hosting and Vultr
 
-The live demo runs on **Render's free tier**. We planned to host on a **Vultr Cloud Compute instance**, but our event credit did not reach the account in time, so we could not deploy there.
+Plainly now runs on a **Vultr Cloud Compute instance**: https://149-28-226-182.sslip.io/
 
-The project is ready for Vultr. The repo includes `deploy/vultr-cloud-init.sh`, a cloud-init script for one Vultr instance (Ubuntu 24.04, smallest plan). It installs Node.js and pm2, clones this repo, starts the Express server, and puts Caddy in front for automatic HTTPS. One process serves the client and the `/api` routes, keeps the Gemini API key in its environment, and holds the impact counter file, so one small instance is enough.
+**What happened, stated plainly.** Our event credit did not appear on the Vultr account before the deadline, so we could not deploy there. We submitted with a demo on Render's free tier (https://plainly-hackglobal.onrender.com/). The credit appeared after the deadline, and on 15 November 2026 we deployed the same code on Vultr. No application code was changed after the deadline. We only updated this README and added the deploy script.
+
+**How the Vultr instance works.** One Node.js and Express process runs under pm2, with Caddy in front for automatic HTTPS. It serves the client and the `/api` routes, keeps the Gemini API key in its environment, and holds the impact counter file. The repo includes `deploy/vultr-cloud-init.sh`, a cloud-init script for this setup (Ubuntu 24.04, smallest plan).
 
 ---
 
@@ -308,7 +310,10 @@ The server uses `app.set("trust proxy", 1)` so the rate limiter sees each visito
 
 ## Impact and reach
 
-Live numbers: https://plainly-hackglobal.onrender.com/impact
+Live numbers on the Vultr instance: https://149-28-226-182.sslip.io/impact
+Live numbers on the Render demo used in our submission: https://plainly-hackglobal.onrender.com/impact
+
+The two deployments keep separate counters. The snapshot below was taken from the Render demo.
 
 Snapshot taken on 15 November 2026 at 08:44 WAT:
 

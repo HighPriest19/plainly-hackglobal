@@ -1,0 +1,44 @@
+#!/bin/bash
+# Cloud-init script for a fresh Vultr Cloud Compute instance (Ubuntu 24.04).
+# Paste it into the "Cloud-Init User Data" field when deploying.
+# Before using it, replace your_key_here with a real Gemini API key.
+set -e
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -y
+apt-get install -y curl git gpg debian-keyring debian-archive-keyring apt-transport-https
+
+# Node 20 and pm2
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+npm install -g pm2
+
+# App
+cd /opt
+git clone https://github.com/HighPriest19/plainly-hackglobal.git
+cd plainly-hackglobal
+npm install --omit=dev
+cat > .env <<'ENVFILE'
+GEMINI_API_KEY=your_key_here
+PORT=3000
+ENVFILE
+pm2 start server/index.js --name plainly
+pm2 save
+pm2 startup systemd -u root --hp /root
+
+# Caddy (HTTPS)
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+apt-get update -y
+apt-get install -y caddy
+
+# Free HTTPS name built from the server IP
+IP=$(curl -4 -s https://api.ipify.org || curl -4 -s ifconfig.me)
+NAME="$(echo "$IP" | tr '.' '-').sslip.io"
+cat > /etc/caddy/Caddyfile <<CADDYFILE
+$NAME {
+    reverse_proxy localhost:3000
+}
+CADDYFILE
+systemctl restart caddy
+echo "https://$NAME" > /root/live-url.txt

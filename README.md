@@ -6,9 +6,9 @@ Built by **npm install victory** for HackGlobal 2026.
 
 | | |
 |---|---|
-| Live demo | `[VULTR URL]` |
-| Demo video | `[VIDEO LINK]` |
-| Hackathon track | `[TRACK]` |
+| Live demo | https://plainly-hackglobal.onrender.com/ |
+| Live impact numbers | https://plainly-hackglobal.onrender.com/impact |
+| Hackathon track | Civic and real-world impact |
 
 ---
 
@@ -25,14 +25,15 @@ Plainly does two jobs in one step:
 
 ## What it does
 
-- Upload a photo, take one with the camera, paste a screenshot, dictate with your mic, or paste text
+- Upload a photo, take one with the camera, paste a screenshot, or paste text
 - Explains in your language: English, Spanish, French, Portuguese, Tagalog, Mandarin, Arabic, Hindi, German, Yoruba, Nigerian Pidgin, Hausa, Igbo and Swahili
 - Rates the message **SAFE**, **SUSPICIOUS** or **LIKELY SCAM** as a rubber stamp
 - Highlights the confusing or suspicious phrases from the original
 - Lists red flags and 2 to 4 clear next steps
 - **Reads the explanation aloud**
 - Makes a **shareable alert card** (PNG) so people can warn their friends and family
-- Tracks aggregate impact counts (letters explained, scams flagged, countries reached) in a small server JSON file — never storing documents or photos
+- **Voice dictation** on the text box, for people who find typing hard
+- A live **impact counter** on the homepage: letters explained, scams flagged and countries reached
 
 <!-- Add 3 screenshots here: upload screen, result with stamp, share card -->
 <!-- ![Upload](docs/upload.png) ![Result](docs/result.png) ![Share card](docs/share-card.png) -->
@@ -45,7 +46,7 @@ Plainly does two jobs in one step:
 flowchart LR
     U[Browser<br/>photo or pasted text<br/>+ chosen language] -->|POST /api/analyze| S
 
-    subgraph V[Vultr Compute instance]
+    subgraph V[Host: Render now, Vultr-ready]
         S[Express server<br/>validate and clean input] --> M[Normalize JSON<br/>safe defaults]
         ST[Static client<br/>HTML, CSS, JS]
     end
@@ -69,9 +70,18 @@ flowchart LR
 | Frontend | Plain HTML, CSS and vanilla JavaScript (no framework) |
 | Backend | Node.js 20+ and Express |
 | Analysis | Gemini API, structured JSON output (`@google/genai`) |
-| Dictation & Read aloud | Browser Web Speech API |
+| Read aloud and dictation | Browser Web Speech API |
+| Impact counter | Totals saved in a small JSON file on the server |
 | Share card | HTML5 canvas, exported as PNG |
-| Hosting | Vultr Compute |
+| Hosting | Render (live demo), Vultr-ready |
+
+---
+
+## Hosting and Vultr
+
+The live demo runs on **Render's free tier**. We planned to host on a **Vultr Cloud Compute instance**, but our event credit did not reach the account in time, so we could not deploy there.
+
+The project is ready for Vultr. The repo includes `deploy/vultr-cloud-init.sh`, a cloud-init script for one Vultr instance (Ubuntu 24.04, smallest plan). It installs Node.js and pm2, clones this repo, starts the Express server, and puts Caddy in front for automatic HTTPS. One process serves the client and the `/api` routes, keeps the Gemini API key in its environment, and holds the impact counter file, so one small instance is enough.
 
 ---
 
@@ -82,14 +92,13 @@ flowchart LR
 ├── client/
 │   ├── index.html        # page layout
 │   ├── styles.css        # paper, highlighter and stamp styling
-│   └── app.js            # upload, dictation, language, results, audio, share card
+│   └── app.js            # upload, language, results, audio, share card
 ├── server/
 │   ├── index.js          # Express app: serves client and the API
 │   ├── routes/
-│   │   └── analyze.js    # POST /api/analyze and GET /api/impact
+│   │   └── analyze.js    # POST /api/analyze: validates input
 │   └── services/
-│       ├── gemini.js     # prompt, JSON schema, model call, result cleanup
-│       └── impact.js     # stores aggregate counts only in server/data/impact.json
+│       └── gemini.js     # prompt, JSON schema, model call, result cleanup
 ├── .env.example          # environment variable names
 ├── .gitignore
 ├── package.json
@@ -103,8 +112,8 @@ flowchart LR
 You need Node.js 20 or newer and an API key for the Gemini API.
 
 ```bash
-git clone https://github.com/HighPriest19/plainly
-cd plainly
+git clone https://github.com/HighPriest19/plainly-hackglobal
+cd plainly-hackglobal
 npm install
 cp .env.example .env
 ```
@@ -203,7 +212,7 @@ curl -X POST http://localhost:3000/api/analyze \
 
 ## Deploy on Vultr
 
-These steps assume a fresh Ubuntu instance on Vultr Compute. Run them over SSH.
+These are the manual steps for a fresh Ubuntu instance on Vultr Compute, run over SSH. To skip SSH, paste `deploy/vultr-cloud-init.sh` into the Cloud-Init User Data field when you deploy.
 
 **1. Install Node.js 20**
 
@@ -215,8 +224,8 @@ sudo apt-get install -y nodejs git
 **2. Get the code and install**
 
 ```bash
-git clone https://github.com/HighPriest19/plainly
-cd plainly
+git clone https://github.com/HighPriest19/plainly-hackglobal
+cd plainly-hackglobal
 npm install --omit=dev
 cp .env.example .env
 nano .env
@@ -247,6 +256,15 @@ The server uses `app.set("trust proxy", 1)` so the rate limiter sees each visito
 
 ---
 
+## Privacy
+
+- **We don't save your documents.** Photos and text are sent to our server, forwarded to the analysis model, and dropped once the result is returned. Nothing is written to a database or to disk, and there are no accounts.
+- **The analysis is done by an AI model.** The Gemini API reads each document. While we use the free quota, Google may use submitted content to improve its products, and reviewers may read it. For that reason, **do not upload IDs, bank details, passwords or other sensitive documents** while testing.
+- Server logs record error messages only, never document contents.
+- The impact counter stores totals only (letters explained, scams flagged, and an optional country count), never documents or photos.
+
+---
+
 ## Design decisions
 
 - **No framework.** The whole client is three files you can read in one sitting.
@@ -268,15 +286,38 @@ The server uses `app.set("trust proxy", 1)` so the rate limiter sees each visito
 
 ---
 
+## Credits
+
+- [Gemini API](https://ai.google.dev/) for reading and explaining documents
+- [Express](https://expressjs.com/) and [dotenv](https://github.com/motdotla/dotenv) on the server
+- [Vultr](https://www.vultr.com/) for hosting
+- Fonts: Fraunces and IBM Plex Mono, from Google Fonts
+- Browser Web Speech API for read aloud and dictation
+
+---
+
 ## Team: npm install victory
 
 | Name | Role |
 |---|---|
-| Hinckley Olagunju | Full-stack developer: backend, AI integration, UI and Vultr deployment |
+| Hinckley Olagunju | Full-stack developer: backend, AI integration, UI and deployment |
 | Divine Ameh Abraham | Developer and team lead: frontend features, testing, user outreach and demo |
+| Oluwatosin Olaleye | Tester |
 
 ---
 
 ## Impact and reach
 
-`[ADD: where real users tried it, which countries, how many scans or shares, one short quote or story]`
+Live numbers: https://plainly-hackglobal.onrender.com/impact
+
+Snapshot taken on 15 November 2026 at 08:44 WAT:
+
+| Country | Users |
+|---|---|
+| Netherlands | 1 |
+| Nigeria | 1 |
+| United States | 1 |
+
+Totals: 4 letters explained, 3 scams flagged, 3 countries reached. All 3 helpfulness ratings were positive (3 ratings is a small sample).
+
+These are early numbers from a small test group. We have no user quotes yet.
